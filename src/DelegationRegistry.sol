@@ -24,6 +24,7 @@ import {ERC2771Context} from "openzeppelin-contracts/contracts/metatx/ERC2771Con
  * @custom:coauthor john (gnosis safe)
  * @custom:coauthor 0xrusowsky
  */
+
 contract DelegationRegistry is IDelegationRegistry, ERC165, ERC2771Context {
     using EnumerableSet for EnumerableSet.AddressSet;
     using EnumerableSet for EnumerableSet.Bytes32Set;
@@ -55,6 +56,7 @@ contract DelegationRegistry is IDelegationRegistry, ERC165, ERC2771Context {
     /**
      * -----------  CONSTRUCTOR -----------
      */
+
     constructor(address trustedForwarder) ERC2771Context(trustedForwarder) {}
 
     /**
