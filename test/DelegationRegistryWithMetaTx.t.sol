@@ -175,7 +175,13 @@ contract DelegationRegistrWithMetaTxTest is Test {
         assertEq(delegates[0], delegate0);
         assertEq(delegates[1], delegate1);
         // Remove
-        reg.delegateForAll(delegate0, false);
+        bytes memory revoke0 = abi.encodeWithSelector(
+            bytes4(keccak256("delegateForAll(address,bool)")),
+            delegate0, 
+            false
+        );
+
+        submitMetaTx(revoke0, vault);
         delegates = reg.getDelegatesForAll(vault);
         assertEq(delegates.length, 1);
     }
