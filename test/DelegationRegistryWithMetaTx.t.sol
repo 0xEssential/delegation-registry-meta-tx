@@ -3,17 +3,62 @@ pragma solidity ^0.8.15;
 
 import {Test} from "forge-std/Test.sol";
 import {console2} from "forge-std/console2.sol";
+import {SigUtils} from "test/utils/SigUtils.sol";
+
 import {DelegationRegistry} from "src/DelegationRegistry.sol";
 import {DelegationRegistryForwarder} from "src/DelegationRegistryForwarder.sol";
 import {IDelegationRegistry} from "src/IDelegationRegistry.sol";
+import {MinimalForwarder} from 'openzeppelin-contracts/contracts/metatx/MinimalForwarder.sol';
 
-contract DelegationRegistryTest is Test {
+
+contract DelegationRegistrWithMetaTxTest is Test {
     DelegationRegistryForwarder fwd;
     DelegationRegistry reg;
+    SigUtils sigUtils;
+
+    address internal vault;
+    address internal delegate;
+    mapping(address => uint256) privateKeys;
 
     function setUp() public {
         fwd = new DelegationRegistryForwarder();
         reg = new DelegationRegistry(address(fwd));
+        sigUtils = new SigUtils(fwd.domainSeparator());
+
+        uint256 vaultPrivateKey = 0xC11CE;
+        vault = vm.addr(vaultPrivateKey);
+        privateKeys[vault] = vaultPrivateKey;
+
+        uint256 delegatePrivateKey = 0xB12CE;
+        delegate = vm.addr(delegatePrivateKey);
+        privateKeys[delegate] = delegatePrivateKey;
+    }
+
+    function buildRequest(bytes memory selector, address from) internal returns (MinimalForwarder.ForwardRequest memory request) {
+        uint256 nonce = fwd.getNonce(from);
+        
+        request = MinimalForwarder.ForwardRequest({
+            to: address(reg),
+            from: from,
+            value: 0,
+            gas: 1e6,
+            nonce: nonce,
+            data: selector
+        });
+    }
+
+    function signRequest(MinimalForwarder.ForwardRequest memory request, uint256 privateKey) internal returns (bytes memory) {
+        bytes32 digest = sigUtils.getTypedDataHash(request);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, digest);
+        return abi.encodePacked(r, s, v);
+    }
+
+    function submitMetaTx(bytes memory encodedFunc, address from) internal {
+        MinimalForwarder.ForwardRequest memory req = buildRequest(encodedFunc, from);
+
+        bytes memory sig = signRequest(req, privateKeys[from]);
+
+        fwd.execute(req, sig);
     }
 
     function getInitHash() public pure returns (bytes32) {
@@ -26,44 +71,104 @@ contract DelegationRegistryTest is Test {
         emit log_bytes32(initHash);
     }
 
-    function testApproveAndRevokeForAll(address vault, address delegate) public {
+    function testApproveAndRevokeForAll() public {
         // Approve
         vm.startPrank(vault);
-        reg.delegateForAll(delegate, true);
+        
+        bytes memory approve = abi.encodeWithSelector(
+            bytes4(keccak256("delegateForAll(address,bool)")),
+            delegate, 
+            true
+        );
+
+        submitMetaTx(approve, vault);
+
         assertTrue(reg.checkDelegateForAll(delegate, vault));
         assertTrue(reg.checkDelegateForContract(delegate, vault, address(0x0)));
         assertTrue(reg.checkDelegateForToken(delegate, vault, address(0x0), 0));
         // Revoke
-        reg.delegateForAll(delegate, false);
+        bytes memory revoke = abi.encodeWithSelector(
+            bytes4(keccak256("delegateForAll(address,bool)")),
+            delegate, 
+            false
+        );
+        submitMetaTx(revoke, vault);
+
         assertFalse(reg.checkDelegateForAll(delegate, vault));
     }
 
-    function testApproveAndRevokeForContract(address vault, address delegate, address contract_) public {
+    function testApproveAndRevokeForContract(address contract_) public {
         // Approve
         vm.startPrank(vault);
-        reg.delegateForContract(delegate, contract_, true);
+        bytes memory approve = abi.encodeWithSelector(
+            bytes4(keccak256("delegateForContract(address,address,bool)")),
+            delegate,
+            contract_, 
+            true
+        );
+
+        submitMetaTx(approve, vault);
+        
         assertTrue(reg.checkDelegateForContract(delegate, vault, contract_));
         assertTrue(reg.checkDelegateForToken(delegate, vault, contract_, 0));
         // Revoke
-        reg.delegateForContract(delegate, contract_, false);
+        bytes memory revoke = abi.encodeWithSelector(
+            bytes4(keccak256("delegateForContract(address,address,bool)")),
+            delegate,
+            contract_, 
+            false
+        );
+
+        submitMetaTx(revoke, vault);
         assertFalse(reg.checkDelegateForContract(delegate, vault, contract_));
     }
 
-    function testApproveAndRevokeForToken(address vault, address delegate, address contract_, uint256 tokenId) public {
+    function testApproveAndRevokeForToken(address contract_, uint256 tokenId) public {
         // Approve
         vm.startPrank(vault);
         reg.delegateForToken(delegate, contract_, tokenId, true);
+        bytes memory approve = abi.encodeWithSelector(
+            bytes4(keccak256("delegateForToken(address,address,uint256,bool)")),
+            delegate,
+            contract_,
+            tokenId, 
+            true
+        );
+
+        submitMetaTx(approve, vault);
         assertTrue(reg.checkDelegateForToken(delegate, vault, contract_, tokenId));
         // Revoke
-        reg.delegateForToken(delegate, contract_, tokenId, false);
+        bytes memory revoke = abi.encodeWithSelector(
+            bytes4(keccak256("delegateForToken(address,address,uint256,bool)")),
+            delegate,
+            contract_,
+            tokenId, 
+            false
+        );
+        submitMetaTx(revoke, vault);
         assertFalse(reg.checkDelegateForToken(delegate, vault, contract_, tokenId));
     }
 
-    function testMultipleDelegationForAll(address vault, address delegate0, address delegate1) public {
+    function testMultipleDelegationForAll(address delegate0, address delegate1) public {
         vm.assume(delegate0 != delegate1);
         vm.startPrank(vault);
-        reg.delegateForAll(delegate0, true);
-        reg.delegateForAll(delegate1, true);
+
+         bytes memory approve0 = abi.encodeWithSelector(
+            bytes4(keccak256("delegateForAll(address,bool)")),
+            delegate0, 
+            true
+        );
+
+        submitMetaTx(approve0, vault);
+
+        bytes memory approve1 = abi.encodeWithSelector(
+            bytes4(keccak256("delegateForAll(address,bool)")),
+            delegate1, 
+            true
+        );
+
+        submitMetaTx(approve1, vault);
+        
         // Read
         address[] memory delegates = reg.getDelegatesForAll(vault);
         assertEq(delegates.length, 2);
