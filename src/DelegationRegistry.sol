@@ -4,7 +4,7 @@ pragma solidity ^0.8.17;
 import {IDelegationRegistry} from "./IDelegationRegistry.sol";
 import {EnumerableSet} from "openzeppelin-contracts/contracts/utils/structs/EnumerableSet.sol";
 import {ERC165} from "openzeppelin-contracts/contracts/utils/introspection/ERC165.sol";
-
+import {ERC2771Context} from "openzeppelin-contracts/contracts/metatx/ERC2771Context.sol";
 /**
  * @title DelegationRegistry
  * @custom:version 1.0
@@ -24,7 +24,8 @@ import {ERC165} from "openzeppelin-contracts/contracts/utils/introspection/ERC16
  * @custom:coauthor john (gnosis safe)
  * @custom:coauthor 0xrusowsky
  */
-contract DelegationRegistry is IDelegationRegistry, ERC165 {
+
+contract DelegationRegistry is IDelegationRegistry, ERC165, ERC2771Context {
     using EnumerableSet for EnumerableSet.AddressSet;
     using EnumerableSet for EnumerableSet.Bytes32Set;
 
@@ -52,6 +53,11 @@ contract DelegationRegistry is IDelegationRegistry, ERC165 {
     function supportsInterface(bytes4 interfaceId) public view virtual override (ERC165) returns (bool) {
         return interfaceId == type(IDelegationRegistry).interfaceId || super.supportsInterface(interfaceId);
     }
+    /**
+     * -----------  CONSTRUCTOR -----------
+     */
+
+    constructor(address trustedForwarder) ERC2771Context(trustedForwarder) {}
 
     /**
      * -----------  WRITE -----------
@@ -61,33 +67,33 @@ contract DelegationRegistry is IDelegationRegistry, ERC165 {
      * @inheritdoc IDelegationRegistry
      */
     function delegateForAll(address delegate, bool value) external override {
-        bytes32 delegationHash = _computeAllDelegationHash(msg.sender, delegate);
+        bytes32 delegationHash = _computeAllDelegationHash(_msgSender(), delegate);
         _setDelegationValues(
-            delegate, delegationHash, value, IDelegationRegistry.DelegationType.ALL, msg.sender, address(0), 0
+            delegate, delegationHash, value, IDelegationRegistry.DelegationType.ALL, _msgSender(), address(0), 0
         );
-        emit IDelegationRegistry.DelegateForAll(msg.sender, delegate, value);
+        emit IDelegationRegistry.DelegateForAll(_msgSender(), delegate, value);
     }
 
     /**
      * @inheritdoc IDelegationRegistry
      */
     function delegateForContract(address delegate, address contract_, bool value) external override {
-        bytes32 delegationHash = _computeContractDelegationHash(msg.sender, delegate, contract_);
+        bytes32 delegationHash = _computeContractDelegationHash(_msgSender(), delegate, contract_);
         _setDelegationValues(
-            delegate, delegationHash, value, IDelegationRegistry.DelegationType.CONTRACT, msg.sender, contract_, 0
+            delegate, delegationHash, value, IDelegationRegistry.DelegationType.CONTRACT, _msgSender(), contract_, 0
         );
-        emit IDelegationRegistry.DelegateForContract(msg.sender, delegate, contract_, value);
+        emit IDelegationRegistry.DelegateForContract(_msgSender(), delegate, contract_, value);
     }
 
     /**
      * @inheritdoc IDelegationRegistry
      */
     function delegateForToken(address delegate, address contract_, uint256 tokenId, bool value) external override {
-        bytes32 delegationHash = _computeTokenDelegationHash(msg.sender, delegate, contract_, tokenId);
+        bytes32 delegationHash = _computeTokenDelegationHash(_msgSender(), delegate, contract_, tokenId);
         _setDelegationValues(
-            delegate, delegationHash, value, IDelegationRegistry.DelegationType.TOKEN, msg.sender, contract_, tokenId
+            delegate, delegationHash, value, IDelegationRegistry.DelegationType.TOKEN, _msgSender(), contract_, tokenId
         );
-        emit IDelegationRegistry.DelegateForToken(msg.sender, delegate, contract_, tokenId, value);
+        emit IDelegationRegistry.DelegateForToken(_msgSender(), delegate, contract_, tokenId, value);
     }
 
     /**
@@ -153,22 +159,22 @@ contract DelegationRegistry is IDelegationRegistry, ERC165 {
      * @inheritdoc IDelegationRegistry
      */
     function revokeAllDelegates() external override {
-        ++vaultVersion[msg.sender];
-        emit IDelegationRegistry.RevokeAllDelegates(msg.sender);
+        ++vaultVersion[_msgSender()];
+        emit IDelegationRegistry.RevokeAllDelegates(_msgSender());
     }
 
     /**
      * @inheritdoc IDelegationRegistry
      */
     function revokeDelegate(address delegate) external override {
-        _revokeDelegate(delegate, msg.sender);
+        _revokeDelegate(delegate, _msgSender());
     }
 
     /**
      * @inheritdoc IDelegationRegistry
      */
     function revokeSelf(address vault) external override {
-        _revokeDelegate(msg.sender, vault);
+        _revokeDelegate(_msgSender(), vault);
     }
 
     /**
@@ -177,7 +183,7 @@ contract DelegationRegistry is IDelegationRegistry, ERC165 {
     function _revokeDelegate(address delegate, address vault) internal {
         ++delegateVersion[vault][delegate];
         // For enumerations, filter in the view functions
-        emit IDelegationRegistry.RevokeDelegate(vault, msg.sender);
+        emit IDelegationRegistry.RevokeDelegate(vault, _msgSender());
     }
 
     /**
