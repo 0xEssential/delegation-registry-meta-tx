@@ -129,7 +129,7 @@ contract DelegationRegistrWithMetaTxTest is Test {
 
     function testMultipleDelegationForAll(address delegate0, address delegate1) public {
         vm.assume(delegate0 != delegate1);
-        
+
         bytes memory approve0 =
             abi.encodeWithSelector(bytes4(keccak256("delegateForAll(address,bool)")), delegate0, true);
 
