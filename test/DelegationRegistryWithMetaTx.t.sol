@@ -78,8 +78,6 @@ contract DelegationRegistrWithMetaTxTest is Test {
 
     function testApproveAndRevokeForAll() public {
         // Approve
-        vm.startPrank(vault);
-
         bytes memory approve = abi.encodeWithSelector(bytes4(keccak256("delegateForAll(address,bool)")), delegate, true);
 
         submitMetaTx(approve, vault);
@@ -96,7 +94,6 @@ contract DelegationRegistrWithMetaTxTest is Test {
 
     function testApproveAndRevokeForContract(address contract_) public {
         // Approve
-        vm.startPrank(vault);
         bytes memory approve = abi.encodeWithSelector(
             bytes4(keccak256("delegateForContract(address,address,bool)")), delegate, contract_, true
         );
@@ -116,8 +113,6 @@ contract DelegationRegistrWithMetaTxTest is Test {
 
     function testApproveAndRevokeForToken(address contract_, uint256 tokenId) public {
         // Approve
-        vm.startPrank(vault);
-        reg.delegateForToken(delegate, contract_, tokenId, true);
         bytes memory approve = abi.encodeWithSelector(
             bytes4(keccak256("delegateForToken(address,address,uint256,bool)")), delegate, contract_, tokenId, true
         );
@@ -134,8 +129,7 @@ contract DelegationRegistrWithMetaTxTest is Test {
 
     function testMultipleDelegationForAll(address delegate0, address delegate1) public {
         vm.assume(delegate0 != delegate1);
-        vm.startPrank(vault);
-
+        
         bytes memory approve0 =
             abi.encodeWithSelector(bytes4(keccak256("delegateForAll(address,bool)")), delegate0, true);
 
